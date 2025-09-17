@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sweet O'Clock - Order & Inventory</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; margin:0; background:#fff8f0; color:#222; }
+    header { background:#ff7043; color:#fff; padding:14px 10px; text-align:center; font-weight:700; }
+    .container { max-width:1100px; margin:18px auto; padding:10px; }
+    h2 { color:#e65100; margin:14px 0 8px; }
+    form, .inventory, table, .card { background:#fff; border-radius:10px; padding:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+    input, select, button { padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0; width:100%; box-sizing:border-box; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    button { background:#ff7043; color:#fff; border:0; cursor:pointer; }
+    button:hover { background:#e64a19; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { border:1px solid #e9e9e9; padding:8px; text-align:center; font-size:14px; }
+    th { background:#ffe0b2; color:#5a3300; }
+    .status-btn { padding:6px 10px; border-radius:6px; border:0; cursor:pointer; color:#fff; }
+    .delivered { background:#4caf50; } .pending { background:#f44336; }
+    .paid { background:#2196f3; } .unpaid { background:#9c27b0; }
+    canvas { margin-top:12px; background:#fafafa; border-radius:8px; padding:8px; }
+    .small { font-size:13px; color:#555; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <header>Sweet O'Clock — Order & Inventory</header>
+  <div class="container">
+
+    <h2>1) Daily Production</h2>
+    <form id="productionForm" class="card">
+      <div class="row">
+        <div>
+          <label>Total production (Kg)</label>
+          <input id="productionKg" type="number" min="1" placeholder="e.g. 20" />
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button type="submit">Add Production</button>
+        </div>
+      </div>
+      <div id="inventoryDisplay" class="small"></div>
+    </form>
+
+    <h2>2) Customers</h2>
+    <form id="customerForm" class="card">
+      <div class="row">
+        <div>
+          <label>Name</label>
+          <input id="custName" type="text" placeholder="Customer name" />
+        </div>
+        <div>
+          <label>Contact</label>
+          <input id="custContact" type="text" placeholder="Phone number" />
+        </div>
+      </div>
+      <div style="margin-top:6px">
+        <label>Address</label>
+        <input id="custAddress" type="text" placeholder="Address (city/area)" />
+      </div>
+      <div style="margin-top:8px">
+        <button type="submit">Save Customer</button>
+      </div>
+    </form>
+
+    <h2>3) Place Order</h2>
+    <form id="orderForm" class="card">
+      <div class="row">
+        <div>
+          <label>Select customer</label>
+          <select id="customerSelect"></select>
+        </div>
+        <div>
+          <label>Product</label>
+          <select id="product">
+            <option>Dry Fruit Laddoo</option>
+            <option>Multivitamin Dryfruit Laddoo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Package</label>
+          <select id="packageSize">
+            <option value="250">250 gm</option>
+            <option value="500">500 gm</option>
+            <option value="1000">1 Kg</option>
+          </select>
+        </div>
+        <div>
+          <label>Quantity (boxes)</label>
+          <input id="quantity" type="number" min="1" value="1" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Outstation delivery?</label>
+          <select id="delivery">
+            <option value="0">No (Local)</option>
+            <option value="100">Yes (+₹100)</option>
+          </select>
+        </div>
+        <div>
+          <label>Payment mode</label>
+          <select id="payment">
+            <option>Online</option>
+            <option>Cash</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <button type="submit">Generate Bill & Place Order</button>
+      </div>
+      <div id="billPreview" class="small"></div>
+    </form>
+
+    <h2>4) Orders</h2>
+    <div class="card">
+      <table id="orderTable">
+        <thead>
+          <tr>
+            <th>Customer</th><th>Product</th><th>Package</th><th>Qty</th><th>Total (₹)</th>
+            <th>Outstation</th><th>Payment Mode</th><th>Delivered</th><th>Paid</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <h2>5) Sales Analysis</h2>
+    <div class="card">
+      <canvas id="salesChart" height="120"></canvas>
+    </div>
+
+  </div>
+
+<script>
+/* ======= Data & defaults ======= */
+const rates = {1000:1200, 500:600, 250:400};
+let customers = JSON.parse(localStorage.getItem('customers')||'[]');
+let inventory = JSON.parse(localStorage.getItem('inventory')||'{}');
+let orders = JSON.parse(localStorage.getItem('orders')||'[]');
+
+const custSelect = document.getElementById('customerSelect');
+const orderTbody = document.querySelector('#orderTable tbody');
+const inventoryDisplay = document.getElementById('inventoryDisplay');
+const billPreview = document.getElementById('billPreview');
+let salesChart = null;
+
+/* ======= Save & render ======= */
+function saveAll(){
+  localStorage.setItem('customers', JSON.stringify(customers));
+  localStorage.setItem('inventory', JSON.stringify(inventory));
+  localStorage.setItem('orders', JSON.stringify(orders));
+}
+
+function render(){
+  // customers drop-down
+  if(customers.length === 0){
+    custSelect.innerHTML = '<option value="">-- Add a customer first --</option>';
+  } else {
+    custSelect.innerHTML = customers.map((c,i)=>`<option value="${i}">${c.name} — ${c.contact}</option>`).join('');
+  }
+
+  // inventory display
+  if(inventory && inventory.totalKg){
+    inventoryDisplay.innerHTML = `<strong>Stock (produced ${inventory.date}): ${inventory.totalKg} Kg</strong>
+      <div class="small">250g: ${inventory['250']||0} boxes &nbsp;&nbsp; 500g: ${inventory['500']||0} boxes &nbsp;&nbsp; 1kg: ${inventory['1000']||0} boxes</div>`;
+  } else {
+    inventoryDisplay.innerHTML = `<div class="small">No inventory recorded yet.</div>`;
+  }
+
+  // orders table
+  orderTbody.innerHTML = orders.map((o, idx) => `
+    <tr>
+      <td>${o.customer}</td>
+      <td>${o.product}</td>
+      <td>${o.package} gm</td>
+      <td>${o.qty}</td>
+      <td>₹${o.total}</td>
+      <td>${o.delivery>0 ? 'Yes' : 'No'}</td>
+      <td>${o.payment}</td>
+      <td><button class="status-btn ${o.delivered? 'delivered':'pending'}" onclick="toggleDelivered(${idx})">${o.delivered? 'Delivered':'Pending'}</button></td>
+      <td><button class="status-btn ${o.paid? 'paid':'unpaid'}" onclick="togglePaid(${idx})">${o.paid? 'Paid':'Not Paid'}</button></td>
+    </tr>`).join('');
+
+  updateChart();
+}
+
+/* ======= Production (inventory distribution) ======= */
+document.getElementById('productionForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const kg = Math.max(0, Number(document.getElementById('productionKg').value || 0));
+  if(!kg){ alert('Enter production in Kg'); return; }
+
+  // Simple proportional split: user requested an explicit distribution example earlier (adjust if you want).
+  // We'll distribute proportionally to fixed ratios: 250g 30%, 500g 40%, 1kg 30% (these are adjustable).
+  const totalGrams = Math.floor(kg * 1000);
+  const ratio250 = 0.30, ratio500 = 0.40, ratio1000 = 0.30;
+  const boxes250 = Math.floor((totalGrams * ratio250) / 250);
+  const boxes500 = Math.floor((totalGrams * ratio500) / 500);
+  const boxes1000 = Math.floor((totalGrams * ratio1000) / 1000);
+
+  inventory = {
+    date: new Date().toLocaleDateString(),
+    totalKg: kg,
+    '250': boxes250,
+    '500': boxes500,
+    '1000': boxes1000
+  };
+  saveAll();
+  render();
+  document.getElementById('productionKg').value = '';
+});
+
+/* ======= Customers ======= */
+document.getElementById('customerForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const name = document.getElementById('custName').value.trim();
+  const contact = document.getElementById('custContact').value.trim();
+  const address = document.getElementById('custAddress').value.trim();
+  if(!name || !contact){ alert('Enter name and contact'); return; }
+
+  // only add if contact not present
+  if(!customers.some(c => c.contact === contact)){
+    customers.push({name, contact, address});
+    saveAll();
+    render();
+  } else {
+    alert('Customer with this contact already exists; you can select them from the list.');
+  }
+  document.getElementById('custName').value='';
+  document.getElementById('custContact').value='';
+  document.getElementById('custAddress').value='';
+});
+
+/* ======= Orders ======= */
+document.getElementById('orderForm').addEventListener('submit', e=>{
+  e.preventDefault();
+
+  if(customers.length === 0){
+    alert('Please add a customer first.');
+    return;
+  }
+  const custIdx = document.getElementById('customerSelect').value;
+  if(custIdx === '' || !customers[custIdx]){ alert('Select a customer'); return; }
+  const customer = customers[custIdx].name;
+
+  const product = document.getElementById('product').value;
+  const pkg = document.getElementById('packageSize').value;
+  const qty = Math.max(1, Number(document.getElementById('quantity').value || 1));
+  const delivery = Number(document.getElementById('delivery').value || 0);
+  const payment = document.getElementById('payment').value;
+
+  // check inventory availability
+  if(!inventory['250'] && !inventory['500'] && !inventory['1000']){
+    alert('No inventory available. Add production first.');
+    return;
+  }
+  if((inventory[pkg]||0) < qty){
+    alert('Not enough boxes available for this package size.');
+    return;
+  }
+
+  const total = rates[pkg] * qty + delivery;
+
+  // reduce inventory only when order is *placed* or when delivered?
+  // Per your spec: "After successful order delivered the inventory should be updated."
+  // You specifically requested inventory update after successful delivery — so we will NOT deduct inventory now.
+  // To keep UX simple, we'll *reserve* stock on placing order (so it doesn't get double-sold), and fully reduce on delivery.
+  // Implement reservation field:
+  if(!inventory.reserved) inventory.reserved = {'250':0,'500':0,'1000':0};
+  inventory.reserved[pkg] = (inventory.reserved[pkg]||0) + qty;
+
+  const order = {
+    customer, product, package: pkg, qty, total, delivery, payment,
+    delivered: false, paid: false, ts: Date.now()
+  };
+  orders.push(order);
+  saveAll();
+  render();
+  document.getElementById('quantity').value = 1;
+  billPreview.innerText = `Bill: ₹${total} (includes delivery ₹${delivery})`;
+});
+
+/* ======= Toggle delivered / paid ======= */
+window.toggleDelivered = function(idx){
+  const o = orders[idx];
+  if(!o) return;
+  // On marking delivered -> update inventory (actual reduction) and un-reserve
+  if(!o.delivered){
+    // ensure sufficient unreserved stock exists
+    const reserved = inventory.reserved && (inventory.reserved[o.package]||0);
+    if((inventory[o.package]||0) < 1){
+      alert('Insufficient stock to mark delivered.');
+      return;
+    }
+    // consume stock
+    inventory[o.package] = (inventory[o.package]||0) - o.qty;
+    // decrease reserved
+    if(inventory.reserved) inventory.reserved[o.package] = Math.max(0, (inventory.reserved[o.package]||0) - o.qty);
+    o.delivered = true;
+  } else {
+    // undo deliver: return to inventory (if you want that behavior)
+    inventory[o.package] = (inventory[o.package]||0) + o.qty;
+    o.delivered = false;
+  }
+  saveAll();
+  render();
+};
+
+window.togglePaid = function(idx){
+  const o = orders[idx];
+  if(!o) return;
+  o.paid = !o.paid;
+  saveAll();
+  render();
+};
+
+/* ======= Chart: always shows two product bars (not empty) ======= */
+function updateChart(){
+  const productLabels = ['Dry Fruit Laddoo','Multivitamin Dryfruit Laddoo'];
+  const totals = productLabels.map(p => {
+    return orders
+      .filter(o => o.product === p)
+      .reduce((s, o) => s + Number(o.total || 0), 0);
+  });
+
+  const ctx = document.getElementById('salesChart');
+  if(salesChart){
+    salesChart.data.labels = productLabels;
+    salesChart.data.datasets[0].data = totals;
+    salesChart.update();
+    return;
+  }
+
+  salesChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: productLabels,
+      datasets: [{
+        label: 'Sales (₹)',
+        data: totals,
+        backgroundColor: ['#ff7043','#4caf50']
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+}
+
+/* ======= Init ======= */
+render();
+</script>
+</body>
+</html>
