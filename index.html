@@ -1,362 +1,417 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Sweet O'Clock - Order & Inventory</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body { font-family: 'Segoe UI', sans-serif; margin:0; background:#fff8f0; color:#222; }
-    header { background:#ff7043; color:#fff; padding:14px 10px; text-align:center; font-weight:700; }
-    .container { max-width:1100px; margin:18px auto; padding:10px; }
-    h2 { color:#e65100; margin:14px 0 8px; }
-    form, .inventory, table, .card { background:#fff; border-radius:10px; padding:12px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
-    input, select, button { padding:8px; border-radius:6px; border:1px solid #ccc; margin:6px 0; width:100%; box-sizing:border-box; }
-    .row { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-    button { background:#ff7043; color:#fff; border:0; cursor:pointer; }
-    button:hover { background:#e64a19; }
-    table { width:100%; border-collapse:collapse; margin-top:10px; }
-    th, td { border:1px solid #e9e9e9; padding:8px; text-align:center; font-size:14px; }
-    th { background:#ffe0b2; color:#5a3300; }
-    .status-btn { padding:6px 10px; border-radius:6px; border:0; cursor:pointer; color:#fff; }
-    .delivered { background:#4caf50; } .pending { background:#f44336; }
-    .paid { background:#2196f3; } .unpaid { background:#9c27b0; }
-    canvas { margin-top:12px; background:#fafafa; border-radius:8px; padding:8px; }
-    .small { font-size:13px; color:#555; margin-top:6px; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sweet O'Clock — Realtime Ladoo Shop</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+:root{
+  --bg1: #fff7f0;
+  --accent: #ff7043;
+  --muted: #6b7280;
+  --card: #fff;
+  --purple: #8e44ad;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,var(--bg1),#fff1f2);color:#111}
+header{background:linear-gradient(90deg,var(--accent),#ffbf5e);color:#fff;padding:18px;text-align:center;font-weight:700;position:sticky;top:0;z-index:10}
+.wrap{max-width:1200px;margin:18px auto;padding:16px;display:grid;grid-template-columns:360px 1fr;gap:16px}
+.card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 20px rgba(16,24,40,0.06)}
+h3{margin:6px 0 10px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+input,select,button,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #eee;font-size:14px}
+button{background:var(--purple);color:#fff;border:0;padding:9px;border-radius:8px;cursor:pointer;transition:all 0.2s}
+button:hover{opacity:0.85;transform:scale(1.03);}
+button.ghost{background:transparent;color:var(--muted);border:1px solid #eee}
+.row{display:flex;gap:8px}
+.row > *{flex:1}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:8px;border:1px solid #f3f3f3;text-align:center;font-size:13px}
+th{background:linear-gradient(90deg,var(--accent),#ffbf5e);color:white}
+.status-btn{padding:6px 10px;border-radius:8px;border:0;color:#fff;cursor:pointer}
+.delivered{background:#16a34a}.notdel{background:#ef4444}
+.paid{background:#0ea5e9}.notpaid{background:#7c3aed}
+.small{font-size:13px;color:var(--muted)}
+.pager{display:flex;justify-content:flex-end;gap:8px;align-items:center;margin-top:8px}
+canvas#ladooCanvas{position:fixed;left:0;top:0;pointer-events:none;z-index:9999}
+@media (max-width:980px){.wrap{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
-  <header>Sweet O'Clock — Order & Inventory</header>
-  <div class="container">
+<header>🍬 Sweet O'Clock — Realtime Shop</header>
+<div class="wrap">
 
-    <h2>1) Daily Production</h2>
-    <form id="productionForm" class="card">
-      <div class="row">
-        <div>
-          <label>Total production (Kg)</label>
-          <input id="productionKg" type="number" min="1" placeholder="e.g. 20" />
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <button type="submit">Add Production</button>
-        </div>
-      </div>
-      <div id="inventoryDisplay" class="small"></div>
-    </form>
-
-    <h2>2) Customers</h2>
-    <form id="customerForm" class="card">
-      <div class="row">
-        <div>
-          <label>Name</label>
-          <input id="custName" type="text" placeholder="Customer name" />
-        </div>
-        <div>
-          <label>Contact</label>
-          <input id="custContact" type="text" placeholder="Phone number" />
-        </div>
-      </div>
-      <div style="margin-top:6px">
-        <label>Address</label>
-        <input id="custAddress" type="text" placeholder="Address (city/area)" />
-      </div>
-      <div style="margin-top:8px">
-        <button type="submit">Save Customer</button>
-      </div>
-    </form>
-
-    <h2>3) Place Order</h2>
-    <form id="orderForm" class="card">
-      <div class="row">
-        <div>
-          <label>Select customer</label>
-          <select id="customerSelect"></select>
-        </div>
-        <div>
-          <label>Product</label>
-          <select id="product">
-            <option>Dry Fruit Laddoo</option>
-            <option>Multivitamin Dryfruit Laddoo</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>Package</label>
-          <select id="packageSize">
-            <option value="250">250 gm</option>
-            <option value="500">500 gm</option>
-            <option value="1000">1 Kg</option>
-          </select>
-        </div>
-        <div>
-          <label>Quantity (boxes)</label>
-          <input id="quantity" type="number" min="1" value="1" />
-        </div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>Outstation delivery?</label>
-          <select id="delivery">
-            <option value="0">No (Local)</option>
-            <option value="100">Yes (+₹100)</option>
-          </select>
-        </div>
-        <div>
-          <label>Payment mode</label>
-          <select id="payment">
-            <option>Online</option>
-            <option>Cash</option>
-          </select>
-        </div>
-      </div>
-
-      <div style="margin-top:8px">
-        <button type="submit">Generate Bill & Place Order</button>
-      </div>
-      <div id="billPreview" class="small"></div>
-    </form>
-
-    <h2>4) Orders</h2>
-    <div class="card">
-      <table id="orderTable">
-        <thead>
-          <tr>
-            <th>Customer</th><th>Product</th><th>Package</th><th>Qty</th><th>Total (₹)</th>
-            <th>Outstation</th><th>Payment Mode</th><th>Delivered</th><th>Paid</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+<!-- LEFT COLUMN -->
+<div style="display:flex;flex-direction:column;gap:12px">
+  <!-- Products -->
+  <div class="card">
+    <h3>Products & Prices</h3>
+    <label>New product name</label>
+    <input id="newProductName" placeholder="Dry Fruit Laddoo">
+    <div class="row" style="margin-top:8px">
+      <button id="btnAddProduct">Add Product</button>
+      <button id="btnRefreshProducts" class="ghost">Refresh</button>
     </div>
-
-    <h2>5) Sales Analysis</h2>
-    <div class="card">
-      <canvas id="salesChart" height="120"></canvas>
-    </div>
-
+    <hr style="margin:10px 0;border-top:1px solid #f3f3f3">
+    <label>Prices (edit & Save)</label>
+    <div id="pricesList" class="small"></div>
   </div>
 
-<script>
-/* ======= Data & defaults ======= */
-const rates = {1000:1200, 500:600, 250:400};
-let customers = JSON.parse(localStorage.getItem('customers')||'[]');
-let inventory = JSON.parse(localStorage.getItem('inventory')||'{}');
-let orders = JSON.parse(localStorage.getItem('orders')||'[]');
+  <!-- Inventory -->
+  <div class="card">
+    <h3>Inventory (per product)</h3>
+    <label>Select product</label>
+    <select id="invProductSelect"></select>
+    <div class="row" style="margin-top:8px">
+      <input id="inv250" placeholder="250g boxes">
+      <input id="inv500" placeholder="500g boxes">
+      <input id="inv1000" placeholder="1kg boxes">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="btnSaveInv">Save Inventory</button>
+    </div>
+    <label style="margin-top:10px">Add production (Kg) — distribute</label>
+    <div class="row">
+      <input id="prodKg" placeholder="e.g. 20">
+      <button id="btnAddProd" class="ghost">Distribute</button>
+    </div>
+    <div id="invList" class="small" style="margin-top:10px"></div>
+  </div>
 
-const custSelect = document.getElementById('customerSelect');
-const orderTbody = document.querySelector('#orderTable tbody');
-const inventoryDisplay = document.getElementById('inventoryDisplay');
+  <!-- Customers -->
+  <div class="card">
+    <h3>Customers</h3>
+    <label>Name</label><input id="custName" placeholder="Customer name">
+    <label>Contact</label><input id="custContact" placeholder="Phone">
+    <label>Address</label><input id="custAddress" placeholder="City / area">
+    <div class="row" style="margin-top:8px">
+      <button id="btnSaveCustomer">Save</button>
+      <button id="btnClearCust" class="ghost">Clear</button>
+    </div>
+    <div class="small" style="margin-top:8px">Saved customers appear in the order form.</div>
+  </div>
+</div>
+
+<!-- RIGHT COLUMN -->
+<div style="display:flex;flex-direction:column;gap:12px">
+  <!-- Orders -->
+  <div class="card">
+    <h3>Place Order</h3>
+    <div class="row">
+      <select id="customerSelect"></select>
+      <select id="productSelect"></select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <select id="sizeSelect">
+        <option value="250">250 g</option>
+        <option value="500">500 g</option>
+        <option value="1000">1 kg</option>
+      </select>
+      <input id="qty" type="number" min="1" value="1">
+    </div>
+    <div class="row" style="margin-top:8px">
+      <select id="deliverySelect"><option value="0">Local</option><option value="100">Outstation (+₹100)</option></select>
+      <select id="payMode"><option>Online Company A/c</option><option>Cash</option></select>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnPlaceOrder">Generate Bill & Place Order</button>
+      <button id="btnPreview" class="ghost">Preview Bill</button>
+    </div>
+    <div id="billPreview" class="small" style="margin-top:8px"></div>
+  </div>
+
+  <!-- Orders Table -->
+  <div class="card">
+    <h3>Orders (5 / page)</h3>
+    <table id="ordersTable">
+      <thead><tr><th>Cust</th><th>Prod</th><th>Size</th><th>Qty</th><th>Total</th><th>Delivery</th><th>PayMode</th><th>Delivered</th><th>Paid</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="pager">
+      <button id="prevPage" class="ghost">Prev</button>
+      <div id="pageInfo" class="small">Page 1</div>
+      <button id="nextPage" class="ghost">Next</button>
+    </div>
+  </div>
+
+  <!-- Stock Analysis -->
+  <div class="card">
+    <h3>Analysis</h3>
+    <canvas id="byProductChart" height="120"></canvas>
+    <canvas id="bySizeChart" height="120" style="margin-top:12px"></canvas>
+  </div>
+
+  <!-- Available stock -->
+  <div class="card">
+    <h3>Available Stock</h3>
+    <div id="stockList" class="small"></div>
+  </div>
+</div>
+</div>
+
+<!-- Ladoo rain canvas -->
+<canvas id="ladooCanvas"></canvas>
+
+<!-- Firebase + Logic -->
+<script type="module">
+// ===== Replace Firebase config with yours =====
+const firebaseConfig = {
+  apiKey: "AIzaSyCLlkJdb0iUyFnuOQUV_2mo3u88kx8OfyE",
+  authDomain: "sweet-o-clocl.firebaseapp.com",
+  databaseURL: "https://sweet-o-clocl-default-rtdb.firebaseio.com",
+  projectId: "sweet-o-clocl",
+  storageBucket: "sweet-o-clocl.firebasestorage.app",
+  messagingSenderId: "756826109350",
+  appId: "1:756826109350:web:00dc171cbe8a475a078b67",
+  measurementId: "G-ZT4HY701LT"
+};
+// ===========================================
+
+// Firebase modular imports
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getDatabase, ref, push, set, update, onValue, get, runTransaction } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-database.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+// DOM
+const newProductName = document.getElementById('newProductName');
+const btnAddProduct = document.getElementById('btnAddProduct');
+const btnRefreshProducts = document.getElementById('btnRefreshProducts');
+const pricesList = document.getElementById('pricesList');
+
+const invProductSelect = document.getElementById('invProductSelect');
+const inv250 = document.getElementById('inv250'), inv500 = document.getElementById('inv500'), inv1000 = document.getElementById('inv1000');
+const btnSaveInv = document.getElementById('btnSaveInv'), btnAddProd = document.getElementById('btnAddProd');
+const prodKg = document.getElementById('prodKg');
+const invList = document.getElementById('invList');
+
+const custName = document.getElementById('custName'), custContact = document.getElementById('custContact'), custAddress = document.getElementById('custAddress');
+const btnSaveCustomer = document.getElementById('btnSaveCustomer'), btnClearCust = document.getElementById('btnClearCust');
+const customerSelect = document.getElementById('customerSelect');
+
+const productSelect = document.getElementById('productSelect'), sizeSelect = document.getElementById('sizeSelect'), qtyInput = document.getElementById('qty');
+const deliverySelect = document.getElementById('deliverySelect'), payMode = document.getElementById('payMode'), btnPlaceOrder = document.getElementById('btnPlaceOrder'), btnPreview = document.getElementById('btnPreview');
 const billPreview = document.getElementById('billPreview');
-let salesChart = null;
+const ordersTable = document.getElementById('ordersTable').querySelector('tbody');
+const prevPage = document.getElementById('prevPage'), nextPage = document.getElementById('nextPage'), pageInfo = document.getElementById('pageInfo');
 
-/* ======= Save & render ======= */
-function saveAll(){
-  localStorage.setItem('customers', JSON.stringify(customers));
-  localStorage.setItem('inventory', JSON.stringify(inventory));
-  localStorage.setItem('orders', JSON.stringify(orders));
-}
+const stockList = document.getElementById('stockList');
 
-function render(){
-  // customers drop-down
-  if(customers.length === 0){
-    custSelect.innerHTML = '<option value="">-- Add a customer first --</option>';
-  } else {
-    custSelect.innerHTML = customers.map((c,i)=>`<option value="${i}">${c.name} — ${c.contact}</option>`).join('');
-  }
+// State
+let products = {}, customers = {}, inventory = {}, orders = [];
+let currentPage = 1, perPage = 5;
 
-  // inventory display
-  if(inventory && inventory.totalKg){
-    inventoryDisplay.innerHTML = `<strong>Stock (produced ${inventory.date}): ${inventory.totalKg} Kg</strong>
-      <div class="small">250g: ${inventory['250']||0} boxes &nbsp;&nbsp; 500g: ${inventory['500']||0} boxes &nbsp;&nbsp; 1kg: ${inventory['1000']||0} boxes</div>`;
-  } else {
-    inventoryDisplay.innerHTML = `<div class="small">No inventory recorded yet.</div>`;
-  }
-
-  // orders table
-  orderTbody.innerHTML = orders.map((o, idx) => `
-    <tr>
-      <td>${o.customer}</td>
-      <td>${o.product}</td>
-      <td>${o.package} gm</td>
-      <td>${o.qty}</td>
-      <td>₹${o.total}</td>
-      <td>${o.delivery>0 ? 'Yes' : 'No'}</td>
-      <td>${o.payment}</td>
-      <td><button class="status-btn ${o.delivered? 'delivered':'pending'}" onclick="toggleDelivered(${idx})">${o.delivered? 'Delivered':'Pending'}</button></td>
-      <td><button class="status-btn ${o.paid? 'paid':'unpaid'}" onclick="togglePaid(${idx})">${o.paid? 'Paid':'Not Paid'}</button></td>
-    </tr>`).join('');
-
-  updateChart();
-}
-
-/* ======= Production (inventory distribution) ======= */
-document.getElementById('productionForm').addEventListener('submit', e=>{
-  e.preventDefault();
-  const kg = Math.max(0, Number(document.getElementById('productionKg').value || 0));
-  if(!kg){ alert('Enter production in Kg'); return; }
-
-  // Simple proportional split: user requested an explicit distribution example earlier (adjust if you want).
-  // We'll distribute proportionally to fixed ratios: 250g 30%, 500g 40%, 1kg 30% (these are adjustable).
-  const totalGrams = Math.floor(kg * 1000);
-  const ratio250 = 0.30, ratio500 = 0.40, ratio1000 = 0.30;
-  const boxes250 = Math.floor((totalGrams * ratio250) / 250);
-  const boxes500 = Math.floor((totalGrams * ratio500) / 500);
-  const boxes1000 = Math.floor((totalGrams * ratio1000) / 1000);
-
-  inventory = {
-    date: new Date().toLocaleDateString(),
-    totalKg: kg,
-    '250': boxes250,
-    '500': boxes500,
-    '1000': boxes1000
-  };
-  saveAll();
-  render();
-  document.getElementById('productionKg').value = '';
-});
-
-/* ======= Customers ======= */
-document.getElementById('customerForm').addEventListener('submit', e=>{
-  e.preventDefault();
-  const name = document.getElementById('custName').value.trim();
-  const contact = document.getElementById('custContact').value.trim();
-  const address = document.getElementById('custAddress').value.trim();
-  if(!name || !contact){ alert('Enter name and contact'); return; }
-
-  // only add if contact not present
-  if(!customers.some(c => c.contact === contact)){
-    customers.push({name, contact, address});
-    saveAll();
-    render();
-  } else {
-    alert('Customer with this contact already exists; you can select them from the list.');
-  }
-  document.getElementById('custName').value='';
-  document.getElementById('custContact').value='';
-  document.getElementById('custAddress').value='';
-});
-
-/* ======= Orders ======= */
-document.getElementById('orderForm').addEventListener('submit', e=>{
-  e.preventDefault();
-
-  if(customers.length === 0){
-    alert('Please add a customer first.');
-    return;
-  }
-  const custIdx = document.getElementById('customerSelect').value;
-  if(custIdx === '' || !customers[custIdx]){ alert('Select a customer'); return; }
-  const customer = customers[custIdx].name;
-
-  const product = document.getElementById('product').value;
-  const pkg = document.getElementById('packageSize').value;
-  const qty = Math.max(1, Number(document.getElementById('quantity').value || 1));
-  const delivery = Number(document.getElementById('delivery').value || 0);
-  const payment = document.getElementById('payment').value;
-
-  // check inventory availability
-  if(!inventory['250'] && !inventory['500'] && !inventory['1000']){
-    alert('No inventory available. Add production first.');
-    return;
-  }
-  if((inventory[pkg]||0) < qty){
-    alert('Not enough boxes available for this package size.');
-    return;
-  }
-
-  const total = rates[pkg] * qty + delivery;
-
-  // reduce inventory only when order is *placed* or when delivered?
-  // Per your spec: "After successful order delivered the inventory should be updated."
-  // You specifically requested inventory update after successful delivery — so we will NOT deduct inventory now.
-  // To keep UX simple, we'll *reserve* stock on placing order (so it doesn't get double-sold), and fully reduce on delivery.
-  // Implement reservation field:
-  if(!inventory.reserved) inventory.reserved = {'250':0,'500':0,'1000':0};
-  inventory.reserved[pkg] = (inventory.reserved[pkg]||0) + qty;
-
-  const order = {
-    customer, product, package: pkg, qty, total, delivery, payment,
-    delivered: false, paid: false, ts: Date.now()
-  };
-  orders.push(order);
-  saveAll();
-  render();
-  document.getElementById('quantity').value = 1;
-  billPreview.innerText = `Bill: ₹${total} (includes delivery ₹${delivery})`;
-});
-
-/* ======= Toggle delivered / paid ======= */
-window.toggleDelivered = function(idx){
-  const o = orders[idx];
-  if(!o) return;
-  // On marking delivered -> update inventory (actual reduction) and un-reserve
-  if(!o.delivered){
-    // ensure sufficient unreserved stock exists
-    const reserved = inventory.reserved && (inventory.reserved[o.package]||0);
-    if((inventory[o.package]||0) < 1){
-      alert('Insufficient stock to mark delivered.');
-      return;
-    }
-    // consume stock
-    inventory[o.package] = (inventory[o.package]||0) - o.qty;
-    // decrease reserved
-    if(inventory.reserved) inventory.reserved[o.package] = Math.max(0, (inventory.reserved[o.package]||0) - o.qty);
-    o.delivered = true;
-  } else {
-    // undo deliver: return to inventory (if you want that behavior)
-    inventory[o.package] = (inventory[o.package]||0) + o.qty;
-    o.delivered = false;
-  }
-  saveAll();
-  render();
-};
-
-window.togglePaid = function(idx){
-  const o = orders[idx];
-  if(!o) return;
-  o.paid = !o.paid;
-  saveAll();
-  render();
-};
-
-/* ======= Chart: always shows two product bars (not empty) ======= */
-function updateChart(){
-  const productLabels = ['Dry Fruit Laddoo','Multivitamin Dryfruit Laddoo'];
-  const totals = productLabels.map(p => {
-    return orders
-      .filter(o => o.product === p)
-      .reduce((s, o) => s + Number(o.total || 0), 0);
-  });
-
-  const ctx = document.getElementById('salesChart');
-  if(salesChart){
-    salesChart.data.labels = productLabels;
-    salesChart.data.datasets[0].data = totals;
-    salesChart.update();
-    return;
-  }
-
-  salesChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: productLabels,
-      datasets: [{
-        label: 'Sales (₹)',
-        data: totals,
-        backgroundColor: ['#ff7043','#4caf50']
-      }]
-    },
-    options: {
-      responsive: true,
-      scales: { y: { beginAtZero: true } }
+// ======= PRODUCTS =======
+function loadProducts(){
+  pricesList.innerHTML=''; invProductSelect.innerHTML=''; productSelect.innerHTML='';
+  const prodRef = ref(db,'products');
+  onValue(prodRef, snapshot=>{
+    products = snapshot.val()||{};
+    for(let pid in products){
+      const p = products[pid];
+      // Prices UI
+      const div = document.createElement('div');
+      div.innerHTML = `<b>${p.name}</b> — ₹ <input type="number" min="0" value="${p.price250||0}" data-box="250" data-id="${pid}"> / 250g,
+                        ₹ <input type="number" min="0" value="${p.price500||0}" data-box="500" data-id="${pid}"> / 500g,
+                        ₹ <input type="number" min="0" value="${p.price1000||0}" data-box="1000" data-id="${pid}"> / 1kg
+                        <button data-id="${pid}">Save</button>`;
+      pricesList.appendChild(div);
+      div.querySelector('button').onclick = ()=>savePrices(pid,div);
+      // Inventory select
+      invProductSelect.innerHTML += `<option value="${pid}">${p.name}</option>`;
+      // Product select for order
+      productSelect.innerHTML += `<option value="${pid}">${p.name}</option>`;
     }
   });
 }
 
-/* ======= Init ======= */
-render();
+function savePrices(pid,div){
+  const inputs = div.querySelectorAll('input');
+  const updates = {};
+  inputs.forEach(inp=>{
+    const box = inp.dataset.box;
+    if(box==='250') updates.price250 = Number(inp.value);
+    if(box==='500') updates.price500 = Number(inp.value);
+    if(box==='1000') updates.price1000 = Number(inp.value);
+  });
+  update(ref(db,'products/'+pid),updates);
+}
+
+btnAddProduct.onclick = ()=>{
+  const name = newProductName.value.trim();
+  if(!name){alert('Enter product name');return;}
+  const prodRef = ref(db,'products');
+  const newProd = push(prodRef);
+  set(newProd,{name:name,price250:0,price500:0,price1000:0});
+  newProductName.value='';
+}
+
+btnRefreshProducts.onclick = ()=>loadProducts();
+
+// ======= CUSTOMERS =======
+function loadCustomers(){
+  customerSelect.innerHTML='';
+  const custRef = ref(db,'customers');
+  onValue(custRef,snapshot=>{
+    customers = snapshot.val()||{};
+    for(let cid in customers){
+      const c = customers[cid];
+      customerSelect.innerHTML += `<option value="${cid}">${c.name}</option>`;
+    }
+  });
+}
+
+btnSaveCustomer.onclick = ()=>{
+  const name=custName.value.trim(),contact=custContact.value.trim(),addr=custAddress.value.trim();
+  if(!name||!contact||!addr){alert('Fill all fields');return;}
+  const custRef = ref(db,'customers');
+  const newCust = push(custRef);
+  set(newCust,{name,phone:contact,address:addr});
+  custName.value=''; custContact.value=''; custAddress.value='';
+}
+
+// ======= INVENTORY =======
+function loadInventory(){
+  invList.innerHTML='';
+  const invRef = ref(db,'inventory');
+  onValue(invRef,snapshot=>{
+    inventory = snapshot.val()||{};
+    for(let pid in products){
+      const inv = inventory[pid]||{boxes250:0,boxes500:0,boxes1000:0};
+      invList.innerHTML += `<b>${products[pid].name}</b> — 250g: ${inv.boxes250}, 500g: ${inv.boxes500}, 1kg: ${inv.boxes1000}<br>`;
+    }
+  });
+}
+
+btnSaveInv.onclick = ()=>{
+  const pid = invProductSelect.value;
+  const updates = {
+    boxes250:Number(inv250.value)||0,
+    boxes500:Number(inv500.value)||0,
+    boxes1000:Number(inv1000.value)||0
+  };
+  update(ref(db,'inventory/'+pid),updates);
+}
+
+btnAddProd.onclick = ()=>{
+  const pid = invProductSelect.value;
+  const totalKg = Number(prodKg.value)||0;
+  if(totalKg<=0){alert('Enter production');return;}
+  const invRef = ref(db,'inventory/'+pid);
+  runTransaction(invRef,current=>{
+    if(current){
+      current.boxes250 += Math.floor(totalKg*4); // simple distribution
+      current.boxes500 += Math.floor(totalKg*2);
+      current.boxes1000 += Math.floor(totalKg*1);
+      return current;
+    } else return {boxes250: Math.floor(totalKg*4), boxes500:Math.floor(totalKg*2), boxes1000:Math.floor(totalKg*1)};
+  });
+  prodKg.value='';
+}
+
+// ======= ORDERS =======
+btnPlaceOrder.onclick = async()=>{
+  const cid = customerSelect.value, pid = productSelect.value;
+  const size = sizeSelect.value, qty = Number(qtyInput.value)||0;
+  if(!cid||!pid||qty<=0){alert('Select product/customer & qty');return;}
+  const inv = inventory[pid]||{boxes250:0,boxes500:0,boxes1000:0};
+  const boxField = size==='250'?'boxes250':size==='500'?'boxes500':'boxes1000';
+  if(inv[boxField]<qty){alert('Insufficient stock');return;}
+  const p = products[pid];
+  const cust = customers[cid];
+  const price = size==='250'?p.price250:size==='500'?p.price500:p.price1000;
+  const total = price*qty+Number(deliverySelect.value||0);
+  const orderRef = push(ref(db,'orders'));
+  set(orderRef,{customer: cust.name,product:p.name,size,qty,total,delivery:deliverySelect.value,payMode:payMode.value,delivered:false,paid:false});
+  // reduce inventory
+  update(ref(db,'inventory/'+pid),{[boxField]:inv[boxField]-qty});
+  alert('Order placed!');
+}
+
+// ======= ORDERS TABLE + PAGINATION =======
+function loadOrders(){
+  const ordersRef = ref(db,'orders');
+  onValue(ordersRef,snapshot=>{
+    orders = [];
+    snapshot.forEach(snap=>{
+      const o = snap.val(); o.id=snap.key; orders.push(o);
+    });
+    currentPage=1; renderOrdersPage();
+  });
+}
+
+function renderOrdersPage(){
+  ordersTable.innerHTML='';
+  const start=(currentPage-1)*perPage;
+  const pageOrders = orders.slice(start,start+perPage);
+  pageOrders.forEach(o=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML=`<td>${o.customer}</td><td>${o.product}</td><td>${o.size}</td><td>${o.qty}</td><td>${o.total}</td><td>${o.delivery}</td><td>${o.payMode}</td>
+    <td><button class="status-btn ${o.delivered?'delivered':'notdel'}" onclick="toggleDelivered('${o.id}',${!o.delivered})">${o.delivered?'Yes':'No'}</button></td>
+    <td><button class="status-btn ${o.paid?'paid':'notpaid'}" onclick="togglePaid('${o.id}',${!o.paid})">${o.paid?'Yes':'No'}</button></td>`;
+    ordersTable.appendChild(tr);
+  });
+  pageInfo.innerText=`Page ${currentPage}`;
+}
+
+prevPage.onclick=()=>{if(currentPage>1){currentPage--;renderOrdersPage();}};
+nextPage.onclick=()=>{if(currentPage*perPage<orders.length){currentPage++;renderOrdersPage();}};
+
+window.toggleDelivered=(id,val)=>update(ref(db,'orders/'+id),{delivered:val});
+window.togglePaid=(id,val)=>update(ref(db,'orders/'+id),{paid:val});
+
+// ======= STOCK LIST =======
+function renderStock(){
+  stockList.innerHTML='';
+  for(let pid in products){
+    const inv = inventory[pid]||{boxes250:0,boxes500:0,boxes1000:0};
+    stockList.innerHTML += `<b>${products[pid].name}</b> — 250g: ${inv.boxes250}, 500g: ${inv.boxes500}, 1kg: ${inv.boxes1000}<br>`;
+  }
+}
+
+// ======= ANALYSIS =======
+let byProductChart,bySizeChart;
+function renderAnalysis(){
+  const prodSales={}, sizeSales={'250':0,'500':0,'1000':0};
+  orders.forEach(o=>{
+    prodSales[o.product] = (prodSales[o.product]||0)+o.qty;
+    sizeSales[o.size] += o.qty;
+  });
+  // Product chart
+  const ctx1 = document.getElementById('byProductChart');
+  if(byProductChart) byProductChart.destroy();
+  byProductChart = new Chart(ctx1,{type:'bar',data:{labels:Object.keys(prodSales),datasets:[{label:'Qty sold',data:Object.values(prodSales),backgroundColor:'#ff7043'}]},options:{responsive:true}});
+  // Size chart
+  const ctx2 = document.getElementById('bySizeChart');
+  if(bySizeChart) bySizeChart.destroy();
+  bySizeChart = new Chart(ctx2,{type:'pie',data:{labels:Object.keys(sizeSales),datasets:[{label:'Qty',data:Object.values(sizeSales),backgroundColor:['#ff7043','#ffa64d','#ffb366']}]},options:{responsive:true}});
+}
+
+// ======= Ladoo Rain =======
+const canvas = document.getElementById('ladooCanvas'), ctx=canvas.getContext('2d');
+canvas.width=window.innerWidth; canvas.height=window.innerHeight;
+let laddoos=[];
+for(let i=0;i<30;i++){laddoos.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,dy:1+Math.random()*2})}
+function drawLadoo(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  laddoos.forEach(l=>{
+    ctx.font='24px Arial'; ctx.fillText('🟠',l.x,l.y);
+    l.y+=l.dy;
+    if(l.y>canvas.height) l.y=0;
+  });
+  requestAnimationFrame(drawLadoo);
+}
+drawLadoo();
+
+// ======= INITIAL LOAD =======
+loadProducts(); loadCustomers(); loadInventory(); loadOrders();
+onValue(ref(db,'inventory'),snapshot=>{inventory=snapshot.val()||{}; renderStock(); renderAnalysis();});
+onValue(ref(db,'orders'),snapshot=>{orders=[];snapshot.forEach(snap=>{const o=snap.val(); o.id=snap.key; orders.push(o);}); renderOrdersPage(); renderAnalysis();});
+
 </script>
 </body>
 </html>
